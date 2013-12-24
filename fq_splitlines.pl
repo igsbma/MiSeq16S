@@ -1,5 +1,4 @@
 #!/usr/bin/perl -w
-#splitlines.pl
 
 use strict;
 
