@@ -1,4 +1,11 @@
-step-by-step preprocessing miseq 300PE reads
+### step-by-step preprocessing miseq 300PE reads AND 250PE reads
+
+# reference: 
+# doi:10.1186/2049-2618-2-6
+# Fadrosh D, Ma B, Gajer P, Sengamalay N, Ott S, Brotman R, Ravel J. 2014. An improved dual-indexing approach for multiplexed 16S rRNA gene sequencing on the Illumina MiSeq platform. Microbiome 2:6
+# http://www.microbiomejournal.com/content/pdf/2049-2618-2-6.pdf
+
+# this pipeline is currently being incorporated into QIIME, stay tuned with the next version of QIIME.
 
 #1. trim barcode
 
@@ -14,7 +21,9 @@ seqtk trimfq -b 12 R1.fq > R1_trimmed_seq.fastq
 seqtk trimfq -b 12 R2.fq > R2_trimmed_seq.fastq
 
 
-#2. assemble paired end read using either pandaseq, FLASH, or SeqPrep. QIIME 1.8 version also implement the function of merging reads ends.
+#2. assemble paired end read using either pandaseq, FLASH, or SeqPrep. QIIME 1.8 version also implement the function of merging reads ends. 
+# note that different merging algorithm has its own issues and disadvantages, choose carefully based on your needs (efficiency, overlapping length, quality, etc.)
+# await evaluating ea-utils
 
 #a)using pandaseq, note that the overlapping length needed to be determined based on read length and amplicon size
 #Run Pandaseq to assemble MiSeq1 paired-end reads
@@ -44,7 +53,10 @@ fastqc --nogroup --noextract -q assembly.fq
 #c) SeqPrep
 # https://github.com/jstjohn/SeqPrep
 
-#d) QIIME1.8 also have the assembly featuer
+#d) PEAR
+http://sco.h-its.org/exelixis/web/software/pear/
+
+#e) QIIME1.8 also have the assembly featuer
 # join_paired_end.py
 
 
@@ -54,13 +66,24 @@ fq_getPairAndOrphan1.8.py R3N_PE.fq R1R2_barcode.fastq PE_temp.fq barcode.fq orp
 
 # Eventually assembly.fq barcode.fq are the 3 files that you want to use for split
 
+
 #4. run split_library for illumina using QIIME
 http://qiime.org/1.3.0/scripts/split_libraries_fastq.html
 
-#5. post-processing to remove barcode, 
+
+#5. post-processing to remove barcode, heterogeneous spacer, and primer
 # first trim off barcode, which is 24 bases at the beginning of the sequences
 # to trim stagger and primer, I use tagcleaner (http://tagcleaner.sourceforge.net) to trim off the sequences from the beginning of the reads to the part that could match to the primer.
+# the structure of the reads is the order of adaptor (pre-trimmed) + barcode + heterogeneous spacer (0-7 bases) + primer + sequence. 
+# await evaluating cutadapt (https://github.com/marcelm/cutadapt#paired-end-adapter-trimming)
+prinseq-lite -trim_left 24 -fasta $fasta -line_width 0 -out_good $out
+tagcleaner -fasta $fasta -out $out_tagclean -line_width 0 -verbose -log tagclean300PE.log -nomatch 3 -tag5 $forwardPrimer -mm5 $mismatch -tag3 $reversePrimer -mm3 $mismatch -trim_within $length 
+
+#getting information on what being trimmed, this is optional and only for logging 
+tagcleaner -fasta $fasta -out $out -line_width 0 -nomatch 3 -info -tag5 $forwardPrimer -mm5 $mismatch -tag3 $reversePrimer -mm3 $mismatch -trim_within #length 
+egrep ">" $fasta_with_header_info | awk '{print $4}' | awk '{count[$1]++}END{for (i in count) print count[i]"\t"i}' > ${stripped}.stat
+prinseq-lite -stats_info -stats_len -fasta $fasta
+
 
 #6. for 250PE, if need to stitch, using stitching_pipeline.pl
 stitching_pipeline.pl -i R1_seqs.fasta -j R2_seqs.fasta -o output_dir
-
